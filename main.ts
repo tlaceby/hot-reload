@@ -214,6 +214,7 @@ async function watchPath (watchPath: string, commands: string[], fileTypes: stri
 
     if (filesChanged) {
       for (const command of commands) {
+        // deno-lint-ignore no-deprecated-deno-api
         const process = Deno.run({
           cmd: ["/bin/sh", "-c", command], // Use `/bin/sh` with `-c` to interpret the command string
           stdout: "piped", // Capture standard output
