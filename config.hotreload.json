@@ -1,0 +1,13 @@
+{
+	"WatchFileTypes": [
+		"go", "json"
+	],
+	"IncludePaths": [
+		"src"
+	],
+	"ExcludePaths": [],
+	"Commands": [
+		"echo \"Files Modified: .MODIFIED_NAMES\""
+	],
+	"Delay": 1000
+}
