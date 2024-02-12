@@ -1,3 +1,4 @@
-# Hot Reloading CLI Script
+# Hot Reloading CLI
 
-This is a script which can be used to enable code/file watching operations on OSX & Linux machines. I have not tested this script on Windows.
+A Simple CLI Tool written in Golang to track changes in folders/files easily. Create custom commands and rules for tracking and excluding files/folders. 
+Everything is managed through the simple JSON configuration and CLI.
