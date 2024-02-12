@@ -74,12 +74,17 @@ func WatchHandler(args []string) {
 	wg.Wait()
 }
 
+type ModifiedStatus struct {
+	Path   string
+	Status string
+}
+
 func watchFilePath(watchPath string, config config.Config) {
-	folderModified := false
 	pathLastUpdatedLU := map[string]time.Time{}
 
 	for {
-		pathsChecked := []string{}
+		modified := []ModifiedStatus{}
+		pathsChecked := []string{watchPath}
 		pathInfo, err := os.Stat(watchPath)
 
 		if err != nil {
@@ -88,14 +93,23 @@ func watchFilePath(watchPath string, config config.Config) {
 		}
 
 		modifiedForWatchPath, exists := pathLastUpdatedLU[watchPath]
+		updatedModtime := pathInfo.ModTime()
 
-		if !exists || modifiedForWatchPath.Before(pathInfo.ModTime()) {
-			pathLastUpdatedLU[watchPath] = pathInfo.ModTime()
-			folderModified = true
+		if !exists || modifiedForWatchPath.Before(updatedModtime) {
+			status := "Modified"
+
+			if !exists {
+				status = "Created"
+			}
+
+			pathLastUpdatedLU[watchPath] = updatedModtime
+			modified = append(modified, ModifiedStatus{
+				Path: watchPath, Status: status,
+			})
 		}
 
 		// If the parent folder is changes/renamed/created/deleted etc... then no need to recurse.
-		if !folderModified {
+		if len(modified) == 0 {
 			for _, path := range listDirContents(watchPath, config.WatchFileTypes) {
 				previousModified, exists := pathLastUpdatedLU[path]
 				info, err := os.Stat(path)
@@ -104,7 +118,11 @@ func watchFilePath(watchPath string, config config.Config) {
 				if err != nil {
 					// File/folder deleted right inbetween checks
 					if exists {
-						folderModified = true
+						modified = append(modified, ModifiedStatus{
+							Path:   path,
+							Status: "Deleted",
+						})
+
 						delete(pathLastUpdatedLU, path)
 					}
 
@@ -112,7 +130,17 @@ func watchFilePath(watchPath string, config config.Config) {
 				}
 
 				if !exists || previousModified.Before(info.ModTime()) {
-					folderModified = true
+					status := "Modified"
+
+					if !exists {
+						status = "Created"
+					}
+
+					modified = append(modified, ModifiedStatus{
+						Path:   path,
+						Status: status,
+					})
+
 					pathLastUpdatedLU[path] = info.ModTime()
 				}
 			}
@@ -122,13 +150,17 @@ func watchFilePath(watchPath string, config config.Config) {
 					continue
 				}
 
-				folderModified = true
+				modified = append(modified, ModifiedStatus{
+					Path:   path,
+					Status: "Deleted",
+				})
+
 				delete(pathLastUpdatedLU, path)
 			}
 		}
 
-		if !folderModified {
-			fmt.Printf("Folder modified! %s\n", watchPath)
+		if len(modified) > 0 {
+			fmt.Printf("Folder modified!\n -> %v\n", modified)
 		}
 
 		time.Sleep(time.Millisecond * time.Duration(config.Delay))
