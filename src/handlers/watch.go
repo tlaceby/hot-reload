@@ -169,7 +169,7 @@ func watchFilePath(watchPath string, config config.Config) {
 		}
 
 		if len(modified) > 0 {
-			modifiedJson, _ := json.Marshal(modified)
+			modifiedJson, _ := json.MarshalIndent(modified, "", " ")
 			jsonStr := string(modifiedJson)
 
 			for _, command := range config.Commands {
