@@ -6,6 +6,7 @@ import (
 	"io/ioutil"
 	"math"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"slices"
 	"strings"
@@ -28,28 +29,36 @@ func WatchHandler(args []string) {
 	data, err := ioutil.ReadFile(configFilePath)
 	errors.HandleErr(err, fmt.Sprintf("Could not read the config file: %s", configFilePath))
 
-	config := config.Config{}
-	err = json.Unmarshal(data, &config)
+	configSettings := config.Config{}
+	err = json.Unmarshal(data, &configSettings)
 	errors.HandleErr(err, "Could not load/parse json config")
 
 	// Specify Default Values
-	config.Delay = int(math.Max(float64(config.Delay), 10))
+	configSettings.Delay = int(math.Max(float64(configSettings.Delay), 10))
 
-	if len(config.IncludePaths) == 0 {
-		config.IncludePaths = append(config.IncludePaths, ".")
+	if len(configSettings.IncludePaths) == 0 {
+		configSettings.IncludePaths = append(configSettings.IncludePaths, ".")
 	}
 
-	if len(config.WatchFileTypes) == 0 {
-		config.WatchFileTypes = append(config.WatchFileTypes, "*")
+	if len(configSettings.WatchFileTypes) == 0 {
+		configSettings.WatchFileTypes = append(configSettings.WatchFileTypes, "*")
 	}
 
-	if len(config.Commands) == 0 {
-		config.Commands = append(config.Commands, `echo "File(s) Changed: .MODIFIED_NAMES"`)
+	if len(configSettings.Commands) == 0 {
+		configSettings.Commands = append(configSettings.Commands, config.Command{Command: "echo", Args: []string{"Files Changes: .MODIFIED"}})
 	}
 
 	var wg sync.WaitGroup
 
-	for _, watchPath := range config.IncludePaths {
+	for _, watchPath := range configSettings.IncludePaths {
+
+		// Make sure all paths are absolute
+		for i, ignorePath := range configSettings.ExcludePaths {
+			if len(ignorePath) > 0 && ignorePath[0] != '/' {
+				configSettings.ExcludePaths[i] = filepath.Join(cwd, ignorePath)
+			}
+		}
+
 		var path string
 
 		if len(watchPath) == 0 {
@@ -66,7 +75,7 @@ func WatchHandler(args []string) {
 
 		wg.Add(1)
 		go func() {
-			watchFilePath(path, config)
+			watchFilePath(path, configSettings)
 			defer wg.Done()
 		}()
 	}
@@ -75,8 +84,8 @@ func WatchHandler(args []string) {
 }
 
 type ModifiedStatus struct {
-	Path   string
-	Status string
+	Path   string `json:"Path"`
+	Status string `json:"Status"`
 }
 
 func watchFilePath(watchPath string, config config.Config) {
@@ -110,7 +119,7 @@ func watchFilePath(watchPath string, config config.Config) {
 
 		// If the parent folder is changes/renamed/created/deleted etc... then no need to recurse.
 		if len(modified) == 0 {
-			for _, path := range listDirContents(watchPath, config.WatchFileTypes) {
+			for _, path := range listDirContents(watchPath, config.WatchFileTypes, config.ExcludePaths) {
 				previousModified, exists := pathLastUpdatedLU[path]
 				info, err := os.Stat(path)
 				pathsChecked = append(pathsChecked, path)
@@ -160,7 +169,25 @@ func watchFilePath(watchPath string, config config.Config) {
 		}
 
 		if len(modified) > 0 {
-			fmt.Printf("Folder modified!\n -> %v\n", modified)
+			modifiedJson, _ := json.Marshal(modified)
+			jsonStr := string(modifiedJson)
+
+			for _, command := range config.Commands {
+				var args []string = []string{}
+				// Replace Templates
+				for _, arg := range command.Args {
+					if strings.Contains(arg, ".MODIFIED") {
+						argStr := strings.ReplaceAll(arg, ".MODIFIED", jsonStr)
+						args = append(args, argStr)
+					}
+				}
+
+				output, err := exec.Command(command.Command, args...).Output()
+
+				if err == nil {
+					println(string(output))
+				}
+			}
 		}
 
 		time.Sleep(time.Millisecond * time.Duration(config.Delay))
@@ -169,7 +196,8 @@ func watchFilePath(watchPath string, config config.Config) {
 }
 
 // listDirContents recursively lists all files and directories within the given path.
-func listDirContents(path string, allowedFileTypes []string) []string {
+func listDirContents(path string, allowedFileTypes []string, ignorePaths []string) []string {
+	allowAllTypes := slices.Contains(allowedFileTypes, "*")
 	var contents []string
 
 	entries, err := os.ReadDir(path)
@@ -180,8 +208,17 @@ func listDirContents(path string, allowedFileTypes []string) []string {
 	for _, entry := range entries {
 		fullPath := filepath.Join(path, entry.Name())
 
+		if slices.Contains(ignorePaths, fullPath) {
+			continue
+		}
+
 		if entry.IsDir() {
-			contents = append(contents, listDirContents(fullPath, allowedFileTypes)...)
+			contents = append(contents, listDirContents(fullPath, allowedFileTypes, ignorePaths)...)
+			continue
+		}
+
+		if allowAllTypes {
+			contents = append(contents, fullPath)
 			continue
 		}
 

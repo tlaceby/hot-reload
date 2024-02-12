@@ -2,12 +2,17 @@ package config
 
 const CONFIG_FILE_NAME = "config.hotreload.json"
 
+type Command struct {
+	Command string
+	Args    []string
+}
+
 type Config struct {
 	WatchFileTypes []string // [ts, js, html, css] [*] means all
 	IncludePaths   []string // [./src, main/foo]   [.] means cwd
 	ExcludePaths   []string
-	Commands       []string // [echo "Hello world"]
-	Delay          int      // Time in ms
+	Commands       []Command // [echo "Hello world"]
+	Delay          int       // Time in ms
 }
 
 func CreateDefaultConfig() Config {
@@ -15,7 +20,9 @@ func CreateDefaultConfig() Config {
 		WatchFileTypes: []string{"*"},
 		IncludePaths:   []string{"."},
 		ExcludePaths:   []string{},
-		Commands:       []string{`echo "Files Modified: .MODIFIED_NAMES"`},
-		Delay:          100,
+		Commands: []Command{
+			{Command: "echo", Args: []string{"Files Changes: .MODIFIED"}},
+		},
+		Delay: 100,
 	}
 }

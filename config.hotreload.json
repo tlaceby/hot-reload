@@ -1,13 +1,18 @@
 {
 	"WatchFileTypes": [
-		"go", "json"
+		"*", "go", "json"
 	],
 	"IncludePaths": [
-		"src"
+		"./src"
 	],
 	"ExcludePaths": [],
 	"Commands": [
-		"echo \"Files Modified: .MODIFIED_NAMES\""
+		{
+			"Command": "echo",
+			"Args": [
+				"Files Changes: .MODIFIED"
+			]
+		}
 	],
-	"Delay": 1000
+	"Delay": 100
 }
